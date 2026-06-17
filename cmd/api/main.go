@@ -1,42 +1,36 @@
 package main
 
 import (
+	"TicketsApp/internal/config"
 	"TicketsApp/internal/database"
-	"context"
-	"fmt"
+	"TicketsApp/internal/users"
 	"log"
 	"net/http"
-	"os"
 )
 
 func main() {
-	dbURL := "postgres://support_user:support_pass@localhost:5432/support_task_manager?sslmode=disable"
+	cfg := config.Load()
 
-	db, err := database.Connect(dbURL)
+	db, err := database.Connect(cfg.DatabaseURL())
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		err := db.Ping(context.Background())
-		if err != nil {
-			http.Error(w, "database not connected", http.StatusInternalServerError)
-			return
-		}
+	userRepository := users.NewRepository(db)
+	userService := users.NewService(userRepository)
+	userHandler := users.NewHandler(userService)
 
+	http.HandleFunc("/users", userHandler.HandleUsers)
+
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("API running"))
 	})
 
-	port := os.Getenv("APP_PORT")
-	if port == "" {
-		port = "8080"
-	}
+	log.Println("Server running on port", cfg.AppPort)
 
-	fmt.Println("Server running on port", port)
-
-	err = http.ListenAndServe(":"+port, nil)
+	err = http.ListenAndServe(":"+cfg.AppPort, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
